@@ -13,7 +13,7 @@ struct EnumWindowsCallbackArgs {
     vector<HWND> windowHandles;
 };
 
-wstring WindowFinder::GetProcessNameFromProcessId(DWORD processId) {
+wstring GetProcessNameFromProcessId(const DWORD processId) {
     wchar_t filename[MAX_PATH] = {0};
     HANDLE processHandle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ, FALSE, processId);
     if (processHandle != nullptr) {
@@ -24,41 +24,7 @@ wstring WindowFinder::GetProcessNameFromProcessId(DWORD processId) {
     return wstring(filename);
 }
 
-std::wstring WindowFinder::GetCurrentDesktopId() const {
-    if (desktopManager == NULL) {
-        return L"";
-    }
-
-    GUID desktopId{};
-    HRESULT result = desktopManager->GetWindowDesktopId(GetForegroundWindow(), &desktopId);
-    if (FAILED(result)) {
-        return L"";
-    }
-
-    wchar_t guidString[39];
-    StringFromGUID2(desktopId, guidString, 39);
-
-    return wstring(guidString);
-}
-
-wstring WindowFinder::GetProcessUniqueId(HWND windowHandle) const {
-    DWORD processId;
-    GetWindowThreadProcessId(windowHandle, &processId);
-    wstring processName = GetProcessNameFromProcessId(processId);
-    if (processName.empty()) {
-        return L"";
-    }
-
-    wstring desktopId = GetCurrentDesktopId();
-
-    return desktopId + processName;
-}
-
-wstring WindowFinder::GetCurrentProcessUniqueId() const {
-    return GetProcessUniqueId(GetForegroundWindow());
-}
-
-BOOL WindowFinder::IsWindowOnCurrentDesktop(HWND windowHandle) const {
+BOOL WindowFinder::IsWindowOnCurrentDesktop(HWND windowHandle) {
     if (desktopManager == NULL) {
         return TRUE;
     }
@@ -72,14 +38,18 @@ BOOL WindowFinder::IsWindowOnCurrentDesktop(HWND windowHandle) const {
     return TRUE;
 }
 
-BOOL WindowFinder::IsWindowFromCurrentProcess(HWND windowHandle) const {
-    return GetProcessUniqueId(windowHandle) == GetCurrentProcessUniqueId();
+BOOL WindowFinder::IsWindowFromCurrentProcess(HWND windowHandle) {
+    DWORD windowProcessId;
+    GetWindowThreadProcessId(windowHandle, &windowProcessId);
+    wstring processName = GetProcessNameFromProcessId(windowProcessId);
+
+    return currentProcessName == processName;
 }
 
 BOOL CALLBACK EnumWindowsCallback(HWND windowHandle, LPARAM parameters) {
     EnumWindowsCallbackArgs *args = (EnumWindowsCallbackArgs *)parameters;
 
-    if (GetForegroundWindow() == windowHandle) {
+    if (args->windowFinder->currentWindowHandle == windowHandle) {
         return TRUE;
     }
 
@@ -125,6 +95,10 @@ BOOL CALLBACK EnumWindowsCallback(HWND windowHandle, LPARAM parameters) {
 }
 
 std::vector<HWND> WindowFinder::FindCurrentProcessWindows() {
+    currentWindowHandle = GetForegroundWindow();
+    DWORD currentProcessId;
+    GetWindowThreadProcessId(currentWindowHandle, &currentProcessId);
+    currentProcessName = GetProcessNameFromProcessId(currentProcessId);
     EnumWindowsCallbackArgs args(this);
     EnumWindows((WNDENUMPROC)&EnumWindowsCallback, (LPARAM)&args);
 
