@@ -73,12 +73,22 @@ int StartBackgroundApp() {
     UINT keyCode = MapVirtualKey(BACKTICK_SCAN_CODE, MAPVK_VSC_TO_VK);
     Config* config = Config::GetInstance();
     modifierKey = config->ModifierKey();
-    if (!RegisterHotKey(NULL, NULL, modifierKey, keyCode)) {
+    if (!RegisterHotKey(NULL, 1, modifierKey, keyCode)) {
         DWORD lastError = GetLastError();
         if (lastError == ERROR_HOTKEY_ALREADY_REGISTERED) {
             MessageBox(
                 NULL, L"Failed to register the hotkey.\nMake sure no other application is already binding to it.",
                 L"Failed to register hotkey", MB_ICONEXCLAMATION);
+            return 0;
+        }
+    }
+
+    if (!RegisterHotKey(NULL, 2, modifierKey | MOD_SHIFT, keyCode)) {
+        DWORD lastError = GetLastError();
+        if (lastError == ERROR_HOTKEY_ALREADY_REGISTERED) {
+            MessageBox(NULL,
+                       L"Failed to register the hotkey.\nMake sure no other application is already binding to it.",
+                       L"Failed to register hotkey", MB_ICONEXCLAMATION);
             return 0;
         }
     }
@@ -128,10 +138,20 @@ int StartBackgroundApp() {
             if (mru.empty()) {
                 continue;
             }
-            if (mru.begin() + offset + 1 < mru.end()) {
-                offset++;
+            if (LOWORD(msg.lParam) & MOD_SHIFT) {
+                // Cycle through windows backwards
+                if (offset > 0) {
+                    offset--;
+                } else {
+                    offset = mru.size() - 1;
+                }
             } else {
-                offset = 0;
+                // Cycle through windows forwards
+                if (offset < mru.size() - 1) {
+                    offset++;
+                } else {
+                    offset = 0;
+                }
             }
 
             HWND windowToFocus = mru[offset];
